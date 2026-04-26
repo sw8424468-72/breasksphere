@@ -1,5 +1,6 @@
 # SurfCaddy
-*BreakSphere** is a live surf ops + recon web app — built for fast reads, tactical clarity, and field-ready deployment.
+
+*SurfCaddy** is a live surf ops + recon web app — built for fast reads, tactical clarity, and field-ready deployment.
 B## 🚀 Stack
 - Next.js (React)
 - TypeScript
