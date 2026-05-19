@@ -1,6 +1,6 @@
-# BreakSphere
+# SURFCADDY
 
-**BreakSphere** is a live surf ops + recon web app — built for fast reads, tactical clarity, and field-ready deployment.
+**SURFCADDY** is a live surf ops + recon web app — built for fast reads, tactical clarity, and field-ready deployment.
 
 ## 🚀 Stack
 
