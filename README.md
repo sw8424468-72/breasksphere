@@ -1,36 +1,73 @@
-# SurfCaddy
+# BreakSphere
 
-*SurfCaddy** is a live surf ops + recon web app — built for fast reads, tactical clarity, and field-ready deployment.
-B## 🚀 Stack
+**BreakSphere** is a live surf ops + recon web app — built for fast reads, tactical clarity, and field-ready deployment.
+
+## 🚀 Stack
+
 - Next.js (React)
 - TypeScript
 - Node.js 20
+- Leaflet + OpenStreetMap (interactive world map)
 - (Optional) OpenSearch integration
 
+## 🗺️ Interactive Map Features
+
+- **OpenStreetMap Integration**: Real-time world map powered by Leaflet
+- **Interactive Overlays**: Mark locations, regions, and tactical positions
+- **Responsive Design**: Mobile-friendly map interface
+- **Location Search**: Find and navigate to specific coordinates
+
 ## 🛠️ Development
-### Local
+
+### Local Setup
+
 ```bash
+# Install dependencies
 npm install
-npm run deOpen http://localhost:3000
 
-Codespaces
-One-click start with the included .devcontainer
+# Set up environment variables
+cp .env.example .env.local
 
-NodeOPENSEARCH_URL=
+# Run development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Codespaces
+
+One-click start with the included `.devcontainer`
+
+### Environment Variables
+
+```env
+OPENSTREETMAP_API_URL=https://tile.openstreetmap.org
+# Optional: OpenSearch integration
+OPENSEARCH_URL=
 OS_USER=
-OSdev — dev server
+OS_PASS=
+```
 
-build — production build
+## 📋 Available Scripts
 
-start — run prod
+- `npm run dev` — Start development server
+- `npm run build` — Production build
+- `npm start` — Run production server
+- `npm run lint` — Lint with ESLint and Prettier
 
- MVP homepage
+## 📦 Core Features
 
- Search module
+- ✅ MVP homepage
+- 🗺️ Interactive world map (Leaflet + OpenStreetMap)
+- 🔍 Search module
+- 🔐 Auth / sessions
+- 📍 Map overlay
+- 🚀 Deploy on Vercel
+
+## 📝 License
+
 MIT © 2025 Legend
 
-
-## B) `LICENSE` (root) — MIT
 ```text
 MIT License
 
@@ -52,64 +89,5 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.# dependencies
-node_modules
-# builds
-.next
-out
-dist
-# env
-.env
-.env.*
-!.env.example
-# misc
-coverage
-.DS_StoreOPENSEARCH_URL=
-OS_USER=
-OS_PASS=
-
- Map overlay
-
- Auth / sessions
-
- Deploy on Vercel
-lint — lint_PASS= 20, ESLint, Prettiervase "name": "BreakSphere",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
-  "postCreateCommand": "corepack enable && npm i || true",
-  "customizations": {
-    "vscode": {
-      "extensions": ["esbenp.prettier-vscode","dbaeumer.vscode-eslint"]
-    }
-  }name: ci
-on: [push, pull_request]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: corepack enable && npm i# initialize Next.js in-place
-npm create next-app@latest . -- --ts --eslint --no-tailwind --src-dir --import-alias "@/*"
-
-# simple MVP page
-mkdir -p src/app
-cat > src/app/page.tsx <<'TSX'
-export default function Home() {
-  return (
-    <main style={{padding: 24}}>
-      <h1>BreakSphere</h1>
-      <p>Base Camp online. Barracks warm. Front Gate hot. Safe locked.</p>
-    </main>
-  );
-}
-TSX# sample env template already exists from above; make the real one locally if you plan to use search
-cp -n .env.example .env.local 2>/dev/null || true
-
-# commit
-git add -A
-git commit -m "init: Next.js TypeScript app + CI + devcontainer + docs"
-git push
-      - run: npm run build --if-present
-}Camp online. Barracks warm. Front Gate hot. Safe locked.
+SOFTWARE.
+```
