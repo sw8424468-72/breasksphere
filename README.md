@@ -1,3 +1,21 @@
+# SurfCaddy
+
+![SurfCaddy logo](assets/surfcaddy-logo.svg)
+
+SurfCaddy is a live surf ops + recon web app built for fast reads, tactical clarity, and field-ready deployment.
+
+> **Repository note:** This is the single source-of-truth repository for SurfCaddy.
+> Use only this repo for updates and sharing to avoid version confusion.
+
+## ✅ New Build (Current)
+This repository contains the current SurfCaddy build.
+Use this repository only for active development, docs, and release work.
+
+## 🚀 Stack
+- Next.js (React)
+- TypeScript
+- Node.js 20
+- Optional OpenSearch integration
 # SURFCADDY
 
 **SURFCADDY** is a live surf ops + recon web app — built for fast reads, tactical clarity, and field-ready deployment.
@@ -19,11 +37,16 @@
 
 ## 🛠️ Development
 
-### Local Setup
-
+### Local
 ```bash
 # Install dependencies
 npm install
+npm run dev
+# open http://localhost:3000
+```
+
+### Environment
+Create a local env file from the example (if present):
 
 # Set up environment variables
 cp .env.example .env.local
@@ -71,18 +94,33 @@ MIT © 2025 Legend
 ```text
 MIT License
 
-Copyright (c) 2025 Legend
+```bash
+cp -n .env.example .env.local 2>/dev/null || true
+```
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Expected variables:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+```bash
+OPENSEARCH_URL=
+OS_USER=
+OS_PASS=
+```
 
+## Scripts
+- `npm run dev` — start dev server
+- `npm run build` — production build
+- `npm run start` — run production server
+- `npm run lint` — run lint checks
+
+## Roadmap
+- MVP homepage
+- Search module
+- Map overlay
+- Auth / sessions
+- Vercel deployment
+
+## License
+MIT © 2025 Legend
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
