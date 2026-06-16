@@ -3,38 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple Calculator</title>
+    <title>Ghost Node Wave Calculator</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="calculator">
-        <div class="display">
-            <input type="text" id="display" readonly placeholder="0">
-        </div>
-        <div class="buttons">
-            <button class="btn btn-clear" onclick="clearDisplay()">C</button>
-            <button class="btn btn-operator" onclick="appendOperator('/')">/</button>
-            <button class="btn btn-operator" onclick="appendOperator('*')">*</button>
-            <button class="btn btn-operator" onclick="deleteLast()">DEL</button>
-
-            <button class="btn" onclick="appendNumber('7')">7</button>
-            <button class="btn" onclick="appendNumber('8')">8</button>
-            <button class="btn" onclick="appendNumber('9')">9</button>
-            <button class="btn btn-operator" onclick="appendOperator('-')">-</button>
-
-            <button class="btn" onclick="appendNumber('4')">4</button>
-            <button class="btn" onclick="appendNumber('5')">5</button>
-            <button class="btn" onclick="appendNumber('6')">6</button>
-            <button class="btn btn-operator" onclick="appendOperator('+')">+</button>
-
-            <button class="btn" onclick="appendNumber('1')">1</button>
-            <button class="btn" onclick="appendNumber('2')">2</button>
-            <button class="btn" onclick="appendNumber('3')">3</button>
-            <button class="btn btn-operator" onclick="appendOperator('%')">%</button>
-
-            <button class="btn" onclick="appendNumber('0')">0</button>
-            <button class="btn" onclick="appendNumber('.')">.</button>
-            <button class="btn btn-equals" onclick="calculate()">=</button>
+    <div class="container">
+        <h1>🌊 Ghost Node Wave Calculator</h1>
+        <p class="subtitle">Calculate wave height at the sandbar break</p>
+        
+        <div class="calculator">
+            <div class="input-section">
+                <div class="input-group">
+                    <label for="swell_height">Swell Height (ft)</label>
+                    <input type="number" id="swell_height" value="6" min="0" step="0.5">
+                </div>
+                
+                <div class="input-group">
+                    <label for="swell_period">Swell Period (sec)</label>
+                    <input type="number" id="swell_period" value="12" min="0" step="1">
+                </div>
+                
+                <div class="input-group">
+                    <label for="swell_dir">Swell Direction (°)</label>
+                    <input type="number" id="swell_dir" value="270" min="0" max="360" step="5">
+                </div>
+                
+                <div class="input-group">
+                    <label for="beach_orientation">Beach Orientation (°)</label>
+                    <input type="number" id="beach_orientation" value="290" min="0" max="360" step="5">
+                </div>
+                
+                <div class="input-group">
+                    <label for="wind_speed">Wind Speed (knots)</label>
+                    <input type="number" id="wind_speed" value="15" min="0" step="1">
+                </div>
+                
+                <div class="input-group">
+                    <label for="wind_dir">Wind Direction (°)</label>
+                    <input type="number" id="wind_dir" value="180" min="0" max="360" step="5">
+                </div>
+                
+                <div class="input-group">
+                    <label for="tide_height">Tide Height (ft)</label>
+                    <input type="number" id="tide_height" value="2.5" min="0" max="8" step="0.5">
+                </div>
+                
+                <div class="input-group">
+                    <label for="tide_trend">Tide Trend</label>
+                    <select id="tide_trend">
+                        <option value="FLOOD">Flood (Rising)</option>
+                        <option value="EBB">Ebb (Falling)</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="distance_to_buoy">Distance to Buoy (miles)</label>
+                    <input type="number" id="distance_to_buoy" value="50" min="0" step="5">
+                </div>
+            </div>
+            
+            <button class="calculate-btn" onclick="calculateWave()">Calculate Wave</button>
+            
+            <div class="result-section" id="result-section" style="display:none;">
+                <h2>📊 Results</h2>
+                <div class="result-box">
+                    <div class="result-item">
+                        <span class="result-label">Calculated Wave Height:</span>
+                        <span class="result-value" id="result-height">-</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Period:</span>
+                        <span class="result-value" id="result-period">-</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Wave Texture:</span>
+                        <span class="result-value" id="result-texture">-</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Longshore Drift:</span>
+                        <span class="result-value" id="result-drift">-</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Status:</span>
+                        <span class="result-value" id="result-status">-</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
