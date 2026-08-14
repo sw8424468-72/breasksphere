@@ -39,8 +39,9 @@ export function handleSurfCaddyPage(req: Request, res: Response) {
     return res.status(400).send("Invalid coordinates");
   }
 
-  const requestedName = req.params.name
-    ? decodeURIComponent(req.params.name).replace(/-/g, " ")
+  const rawName = Array.isArray(req.params.name) ? req.params.name[0] : req.params.name;
+  const requestedName = rawName
+    ? decodeURIComponent(rawName).replace(/-/g, " ")
     : `Ghost Node ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
   const title = escapeHtml(requestedName);
   const jsName = JSON.stringify(requestedName);
