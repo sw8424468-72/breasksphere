@@ -1,147 +1,122 @@
-/**
- * Phase 2: Government data adapters
- *
- * Fetch and parse readings from:
- * - NDBC (NOAA National Data Buoy Center) — realtime2 text format
- * - METAR (AviationWeather) — XML dataserver
- * - CO-OPS (NOAA Tides & Currents) — JSON API
- *
- * All adapters return normalized types: BuoyReading, METARReading, TideReading
- * for consumption by the composite engine.
- */
+import {
+  BuoyReading,
+  METARReading,
+  TideReading,
+  LatLon,
+  haversineMiles,
+} from "./compositeEngine";
 
-import { BuoyReading, METARReading, TideReading, LatLon } from "./compositeEngine";
+const USER_AGENT = "SurfCaddy/1.0";
+const NDBC_ACTIVE_STATIONS = "https://www.ndbc.noaa.gov/activestations.xml";
+const AVIATION_METAR_API = "https://aviationweather.gov/api/data/metar";
+const COOPS_STATIONS = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json";
+const COOPS_DATA = "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter";
 
-/* ─────────────────────────────────────────────────────────────────────────────────
-   NDBC Adapter
-   ───────────────────────────────────────────────────────────────────────────────── */
+function parseNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "" || value === "MM") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
 
-/**
- * Fetch and parse NDBC realtime2 station data (text format).
- * URL: https://www.ndbc.noaa.gov/data/realtime2/{stationId}.txt
- *
- * Format: header line + data lines (space-separated values)
- * Fields: YY MM DD HH MM WDIR WSPD GST WVHT DPD APD MWD PRES PTDY ATMP WTMP DEWP VIS TIDE
- */
+function parseXmlAttributes(tag: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  for (const match of tag.matchAll(/([\w-]+)="([^"]*)"/g)) attrs[match[1]] = match[2];
+  return attrs;
+}
+
+/** Fetch the newest standard-meteorological row for an NDBC station. */
 export async function fetchNDBCRealtime(stationId: string): Promise<BuoyReading | null> {
   try {
-    const url = `https://www.ndbc.noaa.gov/data/realtime2/${stationId}.txt`;
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      console.warn(`NDBC ${stationId} fetch failed: ${resp.status}`);
-      return null;
-    }
-    const text = await resp.text();
-    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    if (lines.length < 3) return null; // header + data required
+    const url = `https://www.ndbc.noaa.gov/data/realtime2/${encodeURIComponent(stationId)}.txt`;
+    const response = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+    if (!response.ok) return null;
 
-    // Parse header (first line contains field names)
-    const headerLine = lines[0];
-    const headers = headerLine.split(/\s+/);
-    const idxWDIR = headers.indexOf("WDIR");
-    const idxWSPD = headers.indexOf("WSPD");
-    const idxWVHT = headers.indexOf("WVHT"); // wave height
-    const idxDPD = headers.indexOf("DPD"); // dominant period
-    const idxMWD = headers.indexOf("MWD"); // mean wave direction
+    const lines = (await response.text())
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
 
-    // Parse latest data line (usually last)
-    const dataLine = lines[lines.length - 1];
-    const vals = dataLine.split(/\s+/);
+    const headerLine = lines.find((line) => line.startsWith("#") && /\bWVHT\b/.test(line));
+    const dataLine = lines.find((line) => !line.startsWith("#"));
+    if (!headerLine || !dataLine) return null;
 
-    const YY = parseInt(vals[0]);
-    const MM = parseInt(vals[1]);
-    const DD = parseInt(vals[2]);
-    const HH = parseInt(vals[3]);
-    const m = parseInt(vals[4]);
+    const headers = headerLine.replace(/^#/, "").trim().split(/\s+/);
+    const values = dataLine.split(/\s+/);
+    const valueAt = (name: string) => {
+      const index = headers.indexOf(name);
+      return index >= 0 ? values[index] : undefined;
+    };
 
-    // Build ISO timestamp (assume current century for YY < 50)
-    const fullYear = YY < 50 ? 2000 + YY : 1900 + YY;
-    const timestamp = new Date(fullYear, MM - 1, DD, HH, m, 0).toISOString();
+    const year = parseNumber(values[0]);
+    const month = parseNumber(values[1]);
+    const day = parseNumber(values[2]);
+    const hour = parseNumber(values[3]);
+    const minute = parseNumber(values[4]);
+    if ([year, month, day, hour, minute].some((v) => v === undefined)) return null;
 
-    // Extract wave parameters
-    const H = idxWVHT >= 0 && vals[idxWVHT] !== "MM" ? parseFloat(vals[idxWVHT]) : undefined;
-    const T = idxDPD >= 0 && vals[idxDPD] !== "MM" ? parseFloat(vals[idxDPD]) : undefined;
-    const dirFrom = idxMWD >= 0 && vals[idxMWD] !== "MM" ? parseFloat(vals[idxMWD]) : undefined;
+    const fullYear = year! < 100 ? (year! < 50 ? 2000 + year! : 1900 + year!) : year!;
+    const timestamp = new Date(
+      Date.UTC(fullYear, month! - 1, day!, hour!, minute!, 0)
+    ).toISOString();
 
-    // Note: NDBC station metadata (lat/lon) not in realtime2 file; must come from station table
     return {
       id: stationId,
-      lat: 0, // fill in from station metadata
+      lat: 0,
       lon: 0,
-      H,
-      T,
-      directionFrom: dirFrom,
+      H: parseNumber(valueAt("WVHT")),
+      T: parseNumber(valueAt("DPD")) ?? parseNumber(valueAt("APD")),
+      directionFrom: parseNumber(valueAt("MWD")),
       timestamp,
     };
-  } catch (err) {
-    console.error(`Error fetching NDBC ${stationId}:`, err);
+  } catch (error) {
+    console.error(`NDBC ${stationId} fetch failed`, error);
     return null;
   }
 }
 
-/**
- * Fetch NDBC station table and build a map of {stationId -> {lat, lon, type}}
- * URL: https://www.ndbc.noaa.gov/data/stations/station_table.txt
- *
- * Format: whitespace-separated columns (STATION LAT LON ...)
- */
+/** Active NDBC station positions, parsed from NOAA's live XML inventory. */
 export async function fetchNDBCStationTable(): Promise<Map<string, { lat: number; lon: number }>> {
-  const map = new Map<string, { lat: number; lon: number }>();
+  const stations = new Map<string, { lat: number; lon: number }>();
   try {
-    const url = "https://www.ndbc.noaa.gov/data/stations/station_table.txt";
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      console.warn(`NDBC station table fetch failed: ${resp.status}`);
-      return map;
-    }
-    const text = await resp.text();
-    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      // Skip header and comments
-      if (line.startsWith("#") || line.toLowerCase().includes("station")) continue;
-      const cols = line.split(/\s+/);
-      if (cols.length < 3) continue;
-      const id = cols[0];
-      const lat = parseFloat(cols[1]);
-      const lon = parseFloat(cols[2]);
-      if (!isNaN(lat) && !isNaN(lon)) {
-        map.set(id, { lat, lon });
+    const response = await fetch(NDBC_ACTIVE_STATIONS, {
+      headers: { "User-Agent": USER_AGENT },
+    });
+    if (!response.ok) return stations;
+    const xml = await response.text();
+
+    for (const match of xml.matchAll(/<station\b[^>]*\/>/g)) {
+      const attrs = parseXmlAttributes(match[0]);
+      const lat = Number(attrs.lat);
+      const lon = Number(attrs.lon);
+      if (attrs.id && Number.isFinite(lat) && Number.isFinite(lon)) {
+        stations.set(attrs.id, { lat, lon });
       }
     }
-  } catch (err) {
-    console.error("Error fetching NDBC station table:", err);
+  } catch (error) {
+    console.error("NDBC active-station inventory failed", error);
   }
-  return map;
+  return stations;
 }
 
-/**
- * Composite: fetch multiple NDBC stations and enrich with metadata.
- */
 export async function fetchNDBCBuoys(stationIds: string[]): Promise<BuoyReading[]> {
-  const stationMeta = await fetchNDBCStationTable();
-  const results: BuoyReading[] = [];
-  for (const id of stationIds) {
-    const reading = await fetchNDBCRealtime(id);
-    if (!reading) continue;
-    const meta = stationMeta.get(id);
-    if (meta) {
-      reading.lat = meta.lat;
-      reading.lon = meta.lon;
-    }
-    results.push(reading);
-  }
-  return results;
+  if (!stationIds.length) return [];
+  const metadata = await fetchNDBCStationTable();
+  const readings = await Promise.all(stationIds.map((id) => fetchNDBCRealtime(id)));
+
+  return readings.flatMap((reading) => {
+    if (!reading) return [];
+    const position = metadata.get(reading.id);
+    if (!position) return [];
+    reading.lat = position.lat;
+    reading.lon = position.lon;
+    return [reading];
+  });
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────────
-   METAR Adapter
-   ───────────────────────────────────────────────────────────────────────────────── */
-
 /**
- * Fetch METAR data from AviationWeather dataserver (radial query).
- * URL: https://aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&...
- *
- * Returns XML; parse to extract wind direction and speed from nearest station.
+ * Get the nearest recent METAR in a geographic box around the target.
+ * AviationWeather is worldwide; the request is made server-side because its API
+ * does not provide browser CORS access.
  */
 export async function fetchMETARRadial(
   centerLat: number,
@@ -150,138 +125,120 @@ export async function fetchMETARRadial(
   hoursBeforeNow = 2
 ): Promise<METARReading | null> {
   try {
-    const url =
-      `https://aviationweather.gov/adds/dataserver_current/httpparam?` +
-      `dataSource=metars&requestType=retrieve&format=xml&` +
-      `radialDistance=${radiusKm};${centerLat},${centerLon}&` +
-      `hoursBeforeNow=${hoursBeforeNow}`;
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      console.warn(`METAR fetch failed: ${resp.status}`);
-      return null;
+    const latDelta = radiusKm / 111;
+    const lonScale = Math.max(0.15, Math.cos((centerLat * Math.PI) / 180));
+    const lonDelta = radiusKm / (111 * lonScale);
+    const south = Math.max(-90, centerLat - latDelta);
+    const north = Math.min(90, centerLat + latDelta);
+    const west = Math.max(-180, centerLon - lonDelta);
+    const east = Math.min(180, centerLon + lonDelta);
+
+    const params = new URLSearchParams({
+      bbox: `${south},${west},${north},${east}`,
+      format: "json",
+      hours: String(hoursBeforeNow),
+    });
+    const response = await fetch(`${AVIATION_METAR_API}?${params}`, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+    });
+    if (response.status === 204 || !response.ok) return null;
+
+    const rows = await response.json();
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+
+    let best: { row: any; distance: number } | null = null;
+    for (const row of rows) {
+      const lat = parseNumber(row.lat ?? row.latitude);
+      const lon = parseNumber(row.lon ?? row.longitude);
+      if (lat === undefined || lon === undefined) continue;
+      const distance = haversineMiles({ lat, lon }, { lat: centerLat, lon: centerLon });
+      if (!best || distance < best.distance) best = { row, distance };
     }
-    const xml = await resp.text();
+    if (!best) return null;
 
-    // Parse XML: look for <METAR>...</METAR> blocks and extract wind_dir_degrees, wind_speed_kt
-    // Simple regex-based parse (for production, use a proper XML parser)
-    const metarMatches = xml.matchAll(/<METAR>(.*?)<\/METAR>/gs);
-    let bestReading: METARReading | null = null;
-
-    for (const match of metarMatches) {
-      const content = match[1];
-      const stationMatch = content.match(/<station_id>([^<]+)<\/station_id>/);
-      const windDirMatch = content.match(/<wind_dir_degrees>([^<]+)<\/wind_dir_degrees>/);
-      const windSpdMatch = content.match(/<wind_speed_kt>([^<]+)<\/wind_speed_kt>/);
-      const obsTimeMatch = content.match(/<observation_time>(.*?)<\/observation_time>/);
-
-      const station = stationMatch ? stationMatch[1] : "unknown";
-      const windDir = windDirMatch ? parseFloat(windDirMatch[1]) : undefined;
-      const windSpd = windSpdMatch ? parseFloat(windSpdMatch[1]) : undefined;
-      const obsTime = obsTimeMatch ? obsTimeMatch[1] : new Date().toISOString();
-
-      bestReading = { station, windDir, windSpeedKts: windSpd, timestamp: obsTime };
-      break; // Take first (nearest) station; can be enhanced to rank by distance
-    }
-
-    return bestReading;
-  } catch (err) {
-    console.error("Error fetching METAR:", err);
+    const row = best.row;
+    return {
+      station: String(row.icaoId ?? row.station_id ?? row.stationId ?? "unknown"),
+      windDir: parseNumber(row.wdir ?? row.windDir ?? row.wind_dir_degrees),
+      windSpeedKts: parseNumber(row.wspd ?? row.windSpeed ?? row.wind_speed_kt),
+      timestamp: String(row.obsTime ?? row.reportTime ?? row.observation_time ?? new Date().toISOString()),
+    };
+  } catch (error) {
+    console.error("AviationWeather METAR fetch failed", error);
     return null;
   }
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────────
-   CO-OPS Tide Adapter
-   ───────────────────────────────────────────────────────────────────────────────── */
-
-/**
- * Fetch CO-OPS station list (JSON) and find nearest tide station by distance.
- * URL: https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json
- */
-export async function findNearestCOOPSStation(ghostNode: LatLon): Promise<string | null> {
+export async function findNearestCOOPSStation(
+  ghostNode: LatLon,
+  maxDistanceMiles = 300
+): Promise<string | null> {
   try {
-    const url = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json";
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      console.warn(`CO-OPS station list fetch failed: ${resp.status}`);
-      return null;
-    }
-    const data = await resp.json();
-    if (!data.stations || !Array.isArray(data.stations)) return null;
+    const response = await fetch(COOPS_STATIONS, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!Array.isArray(data.stations)) return null;
 
-    // Find station nearest to ghost node
-    let nearest = null;
-    let minDist = Infinity;
-    for (const st of data.stations) {
-      if (!st.lat || !st.lon) continue;
-      const dx = st.lat - ghostNode.lat;
-      const dy = (st.lon - ghostNode.lon) * Math.cos((ghostNode.lat * Math.PI) / 180);
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < minDist) {
-        minDist = dist;
-        nearest = st.id;
+    let best: { id: string; distance: number } | null = null;
+    for (const station of data.stations) {
+      const lat = parseNumber(station.lat);
+      const lon = parseNumber(station.lng ?? station.lon);
+      if (lat === undefined || lon === undefined || !station.id) continue;
+      const distance = haversineMiles({ lat, lon }, ghostNode);
+      if (distance <= maxDistanceMiles && (!best || distance < best.distance)) {
+        best = { id: String(station.id), distance };
       }
     }
-    return nearest;
-  } catch (err) {
-    console.error("Error finding nearest CO-OPS station:", err);
+    return best?.id ?? null;
+  } catch (error) {
+    console.error("CO-OPS station discovery failed", error);
     return null;
   }
 }
 
-/**
- * Fetch latest water level from CO-OPS datagetter.
- * URL: https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=water_level&...
- *
- * Returns latest reading with optional trend (rising/falling).
- */
 export async function fetchCOOPSWaterLevel(stationId: string): Promise<TideReading | null> {
   try {
-    // Fetch last 24 hours to compute trend
-    const now = new Date();
-    const begin = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const endStr = now.toISOString().replace(/[:-]/g, "").slice(0, 12); // YYYYMMDDHHMM
-    const beginStr = begin.toISOString().replace(/[:-]/g, "").slice(0, 12);
+    const params = new URLSearchParams({
+      date: "today",
+      station: stationId,
+      product: "water_level",
+      datum: "MLLW",
+      time_zone: "gmt",
+      units: "metric",
+      application: "SurfCaddy",
+      format: "json",
+    });
+    const response = await fetch(`${COOPS_DATA}?${params}`, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    if (!Array.isArray(payload.data) || payload.data.length === 0) return null;
 
-    const url =
-      `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?` +
-      `product=water_level&begin_date=${beginStr}&end_date=${endStr}&` +
-      `station=${stationId}&time_zone=GMT&units=metric&format=json`;
+    const valid = payload.data
+      .map((row: any) => ({ row, value: parseNumber(row.v ?? row.value) }))
+      .filter((item: any) => item.value !== undefined);
+    if (!valid.length) return null;
 
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      console.warn(`CO-OPS datagetter failed for ${stationId}: ${resp.status}`);
-      return null;
-    }
-    const data = await resp.json();
-    if (!data.data || data.data.length === 0) return null;
-
-    const latest = data.data[data.data.length - 1];
-    const waterLevel = parseFloat(latest.value);
-
-    // Compute trend: compare latest vs 6 hours ago
-    let trend: "rising" | "falling" | "steady" = "steady";
-    if (data.data.length > 6) {
-      const earlier = parseFloat(data.data[Math.max(0, data.data.length - 7)].value);
-      if (waterLevel > earlier) trend = "rising";
-      else if (waterLevel < earlier) trend = "falling";
-    }
+    const latest = valid[valid.length - 1];
+    const earlier = valid[Math.max(0, valid.length - 11)];
+    const delta = latest.value - earlier.value;
+    const trend: TideReading["trend"] =
+      Math.abs(delta) < 0.02 ? "steady" : delta > 0 ? "rising" : "falling";
 
     return {
       station: stationId,
-      waterLevelM: waterLevel,
+      waterLevelM: latest.value,
       trend,
-      timestamp: latest.t,
+      timestamp: String(latest.row.t ?? new Date().toISOString()),
     };
-  } catch (err) {
-    console.error(`Error fetching CO-OPS water level for ${stationId}:`, err);
+  } catch (error) {
+    console.error(`CO-OPS ${stationId} fetch failed`, error);
     return null;
   }
 }
-
-/* ─────────────────────────────────────────────────────────────────────────────────
-   Composite: fetch all data for a ghost node
-   ───────────────────────────────────────────────────────────────────────────────── */
 
 export interface GhostNodeData {
   timestamp: string;
@@ -290,43 +247,22 @@ export interface GhostNodeData {
   tide?: TideReading;
 }
 
-/**
- * Given a ghost node and list of candidate NDBC station IDs (from Phase 1 source index),
- * fetch all government data in parallel.
- */
 export async function fetchAllGovernmentData(
   ghostNode: LatLon,
-  ndbc_stationIds: string[]
+  ndbcStationIds: string[]
 ): Promise<GhostNodeData> {
   const timestamp = new Date().toISOString();
-
-  // Fetch in parallel
   const [buoys, metar, tideStationId] = await Promise.all([
-    fetchNDBCBuoys(ndbc_stationIds),
+    fetchNDBCBuoys(ndbcStationIds),
     fetchMETARRadial(ghostNode.lat, ghostNode.lon, 160, 2),
     findNearestCOOPSStation(ghostNode),
   ]);
 
-  let tide: TideReading | undefined;
-  if (tideStationId) {
-    tide = await fetchCOOPSWaterLevel(tideStationId);
-  }
-
-  return { timestamp, buoys, metar, tide };
+  const tide = tideStationId ? await fetchCOOPSWaterLevel(tideStationId) : null;
+  return {
+    timestamp,
+    buoys,
+    metar: metar ?? undefined,
+    tide: tide ?? undefined,
+  };
 }
-
-/* ─────────────────────────────────────────────────────────────────────────────────
-   Example usage
-   ───────────────────────────────────────────────────────────────────────────────── */
-
-/*
-import { fetchAllGovernmentData } from "./adapters";
-
-const ghostNode = { lat: -43.2092, lon: 147.7519 }; // Tasmania
-const candidateStations = ["TASMAN_61020", "TASMAN_61021", "CORAL_61022", "SYDNEY_41046"];
-
-const data = await fetchAllGovernmentData(ghostNode, candidateStations);
-console.log("Buoys:", data.buoys.length);
-console.log("METAR:", data.metar);
-console.log("Tide:", data.tide);
-*/
