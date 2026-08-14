@@ -68,6 +68,10 @@ Useful endpoints:
 
 The old hand-entry calculator remains available under `/legacy/` for reference; it is no longer the operational home screen.
 
+## Verification
+
+Every push to `main` runs the **SurfCaddy CI** TypeScript check so missing engine files and broken imports cannot silently sit in the source-of-truth branch again.
+
 ## Source boundaries
 
 Current adapters use government/official observation services:
